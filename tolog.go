@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -70,6 +71,7 @@ var LogWithColor = true
 var logFile *os.File
 var writeChannel chan string
 var closeChannel chan struct{}
+var wg sync.WaitGroup
 
 // The size of go channel, default 300.
 var channelSize = 300
@@ -120,6 +122,9 @@ func SetLogPrefix(prefix string) {
 
 // SetLogChannelSize set the size of go channel for cache.
 func SetLogChannelSize(size int) {
+	if size < 101 {
+		return
+	}
 	channelSize = size
 }
 
@@ -318,7 +323,7 @@ func CreateFullLog(l *ToLog) {
 	var bgColor string
 
 	if !LogWithColor {
-		fullLog := "[" + l.logTime + "] [" + string(l.logType) + "] " + colorReset + " " + l.logContext
+		fullLog := "[" + l.logTime + "] [" + string(l.logType) + "] " + " " + l.logContext
 		l.FullLog = fullLog
 		return
 	}
@@ -405,6 +410,7 @@ func (l *ToLog) PrintAndWriteSafe() {
 
 // writeToFile is a goroutine that continuously writes log entries to the log file using the channel.
 func writeToFile() {
+	defer wg.Done()
 	buffer := []string{}
 	ticker := time.NewTicker(logTicker)
 	defer ticker.Stop()
@@ -419,10 +425,23 @@ func writeToFile() {
 			if len(buffer) > 0 {
 				flushBuffer(&buffer)
 			}
-		case <-closeChannel: // 接收到关闭信号
+		case <-closeChannel:
 			if len(buffer) > 0 {
 				flushBuffer(&buffer)
 			}
+
+			for len(writeChannel) > 0 {
+				logEntry := <-writeChannel
+				buffer = append(buffer, logEntry)
+				if len(buffer) >= 100 {
+					flushBuffer(&buffer)
+				}
+			}
+
+			if len(buffer) > 0 {
+				flushBuffer(&buffer)
+			}
+
 			return
 		}
 	}
@@ -483,6 +502,7 @@ func initLog() error {
 
 	writeChannel = make(chan string, channelSize)
 	closeChannel = make(chan struct{})
+	wg.Add(1)
 	go writeToFile()
 
 	return nil
@@ -491,11 +511,8 @@ func initLog() error {
 // CloseLogFile closes the log file.
 func CloseLogFile() {
 	if logFile != nil {
-		close(closeChannel)
-		for len(writeChannel) > 0 {
-			Warningf("Waitfor log file to be closed...").PrintLog()
-			time.Sleep(time.Millisecond * 50)
-		}
+		close(closeChannel) // 发送关闭信号
+		wg.Wait()           // 等待 writeToFile goroutine 退出
 		err := logFile.Close()
 		if err != nil {
 			return
