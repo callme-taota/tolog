@@ -459,7 +459,6 @@ func flushBuffer(buffer *[]string) {
 		fmt.Println("[error]", err)
 		return
 	}
-	Warningf("buffer clean").PrintAndWriteSafe()
 	*buffer = (*buffer)[:0]
 }
 
