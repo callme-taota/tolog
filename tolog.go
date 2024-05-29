@@ -458,6 +458,16 @@ func initLog() error {
 	}
 	currentLogDate = currentDay
 
+	// Create the logs directory if it doesn't exist
+	logDir := "./logs"
+	if _, err := os.Stat(logDir); os.IsNotExist(err) {
+		err = os.Mkdir(logDir, 0755)
+		if err != nil {
+			fmt.Println("[error] Failed to create logs directory:", err)
+			return err
+		}
+	}
+
 	file, err := os.OpenFile(logFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
 		fmt.Println("[error]", err)
