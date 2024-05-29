@@ -69,6 +69,7 @@ var LogWithColor = true
 // Variables for managing log file and writing to file concurrently.
 var logFile *os.File
 var writeChannel chan string
+var closeChannel chan struct{}
 
 // The size of go channel, default 300.
 var channelSize = 300
@@ -418,6 +419,11 @@ func writeToFile() {
 			if len(buffer) > 0 {
 				flushBuffer(&buffer)
 			}
+		case <-closeChannel: // 接收到关闭信号
+			if len(buffer) > 0 {
+				flushBuffer(&buffer)
+			}
+			return
 		}
 	}
 }
@@ -476,6 +482,7 @@ func initLog() error {
 	logFile = file
 
 	writeChannel = make(chan string, channelSize)
+	closeChannel = make(chan struct{})
 	go writeToFile()
 
 	return nil
@@ -484,6 +491,11 @@ func initLog() error {
 // CloseLogFile closes the log file.
 func CloseLogFile() {
 	if logFile != nil {
+		close(closeChannel)
+		for len(writeChannel) > 0 {
+			Warningf("Waitfor log file to be closed...").PrintLog()
+			time.Sleep(time.Millisecond * 50)
+		}
 		err := logFile.Close()
 		if err != nil {
 			return
