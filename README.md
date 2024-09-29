@@ -38,12 +38,13 @@ Just a log package. Have to create a logs dir in your project.
 
 ## Log setting function
 ```
-    SetLogWithColor()
-    SetLogPrefix()
-    SetLogChannelSize()
-    SetLogTickerTime()
-    SetLogFileDateFormat()
-    SetLogTimeFormat()
+    SetLogWithColor(bool)
+    SetLogPrefix(string)
+    SetLogChannelSize(int)
+    SetLogTickerTime(time.Duration)
+    SetLogFileDateFormat(format DateFormat)
+    SetLogTimeFormat(format DateFormat)
+    SetLogTimezone(*time.Location)
 ```
 
 ## Print & Write

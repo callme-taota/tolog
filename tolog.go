@@ -67,10 +67,14 @@ var LogfilePrefix = ""
 // LogWithColor The variable of whether to use color in the log, default is true.
 var LogWithColor = true
 
+// LogTimeZone The time zoon logger will print time at. Default is Local.
+var LogTimeZone = time.Local
+
 // Variables for managing log file and writing to file concurrently.
 var logFile *os.File
 var writeChannel chan string
 var closeChannel chan struct{}
+var isLogFileClosed bool = true
 var wg sync.WaitGroup
 
 // The size of go channel, default 300.
@@ -143,12 +147,17 @@ func SetLogTimeFormat(format DateFormat) {
 	logTimeFormat = format
 }
 
+// SetLogTimeZone sets the time zone for log time.
+func SetLogTimeZone(zone *time.Location) {
+	LogTimeZone = zone
+}
+
 // Log creates a new ToLog instance with default values and applies any specified options.
 func Log(options ...Options) *ToLog {
 	tolog := &ToLog{
 		logType:    StatusInfo,
 		logContext: "",
-		logTime:    time.Now().Format(string(logTimeFormat)),
+		logTime:    time.Now().In(LogTimeZone).Format(string(logTimeFormat)),
 	}
 
 	for _, option := range options {
@@ -473,7 +482,7 @@ func checkLogFileDate() {
 
 // initLog initializes the log file and sets up the writeToFile goroutine.
 func initLog() error {
-	currentDay := time.Now().Format(string(logFileDateFormat))
+	currentDay := time.Now().In(LogTimeZone).Format(string(logFileDateFormat))
 	logFilePath := ""
 	if LogfilePrefix != "" {
 		logFilePath = "./logs/" + LogfilePrefix + "-log-" + currentDay + ".log"
@@ -499,6 +508,8 @@ func initLog() error {
 	}
 	logFile = file
 
+	isLogFileClosed = false
+
 	writeChannel = make(chan string, channelSize)
 	closeChannel = make(chan struct{})
 	wg.Add(1)
@@ -509,14 +520,23 @@ func initLog() error {
 
 // CloseLogFile closes the log file.
 func CloseLogFile() {
-	if logFile != nil {
-		close(closeChannel) // 发送关闭信号
-		wg.Wait()           // 等待 writeToFile goroutine 退出
-		err := logFile.Close()
-		if err != nil {
-			return
-		}
+	if logFile == nil || isLogFileClosed {
+		return
 	}
+
+	if writeChannel != nil { // wait the writeToFile goroutine to finish
+		closeChannel <- struct{}{}
+		close(writeChannel)
+	}
+
+	wg.Wait() // wait the writeToFile goroutine to finish
+
+	err := logFile.Close()
+	if err != nil {
+		return
+	}
+	isLogFileClosed = true
+	logFile = nil
 }
 
 var replacements = []struct {

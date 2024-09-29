@@ -4,21 +4,40 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-// TestLogFunction tests the logging functionality.
-func TestLogFunction(t *testing.T) {
-	// Initialize the log
-	err := initLog()
-	if err != nil {
-		t.Fatalf("Failed to initialize log: %v", err)
-	}
+var timeZone, _ = time.LoadLocation("Asia/Shanghai")
+
+// TestToLog tests the ToLog package.
+func TestToLog(t *testing.T) {
+	SetLogTimeZone(timeZone)
+	t.Run("LevelInsert", LevelLogInsert)
+	t.Run("TestLogFunction", ManyLogInsert)
+	t.Run("TestSingle", SingleLogInsert)
+}
+
+func LevelLogInsert(t *testing.T) {
+	logPrefix := "TestLevelInsert"
+	logFilePath := "./logs/" + logPrefix + "-log-" + time.Now().Format(string(DateOnly)) + ".log"
+	cleanLogFiles(t, logFilePath)
+	SetLogPrefix(logPrefix)
+
+	LevelLogInsertTest(t)
+
+	checkMessageExistInFile(t, logFilePath, "This is an info message")
+}
+
+func LevelLogInsertTest(t *testing.T) {
 	defer CloseLogFile()
 
 	SetLogTimeFormat(StampNano)
-	// Test log messages
+
 	testMessages := []struct {
 		level   LogStatus
 		message string
@@ -34,36 +53,74 @@ func TestLogFunction(t *testing.T) {
 	Errorf("Test log message: %s", testMessages[2].message).PrintAndWriteSafe()
 	Debugf("Test log message: %s", testMessages[3].message).PrintAndWriteSafe()
 	Noticef("Test log message: %s", testMessages[4].message).PrintAndWriteSafe()
-
-	for i := 1; i <= 10; i++ {
-		go ManyInsert(i)
-	}
-
-	// Allow some time for the logs to be written
-	time.Sleep(4 * time.Second)
-	// Check log file content
-	logFilePath := "./logs/log-" + time.Now().Format(string(DateOnly)) + ".log"
-	fileContent, err := os.ReadFile(logFilePath)
-	if err != nil {
-		t.Fatalf("Failed to read log file: %v", err)
-	}
-
-	content := string(fileContent)
-	for _, tm := range testMessages {
-		if !strings.Contains(content, tm.message) {
-			t.Errorf("Expected log message '%s' not found", tm.message)
-		}
-	}
-	if !strings.Contains(content, "Test log message: Log message number 5000") {
-		t.Errorf("Expected log message '%s' not found", "Test log message: Log message number 5000")
-	}
 }
 
-func ManyInsert(k int) {
+// TestLogFunction tests the logging functionality.
+func ManyLogInsert(t *testing.T) {
+	logPrefix := "TestManyInsert"
+	logFilePath := "./logs/" + logPrefix + "-log-" + time.Now().Format(string(DateOnly)) + ".log"
+	cleanLogFiles(t, logFilePath)
+	SetLogPrefix(logPrefix)
+
+	ManyLogInsertTest(t)
+
+	// Check log file content
+	checkMessageExistInFile(t, logFilePath, "Test log message: Log message number 5000")
+}
+
+func ManyLogInsertTest(t *testing.T) {
+	defer CloseLogFile()
+
+	SetLogTimeFormat(StampNano)
+
+	var wg sync.WaitGroup
+
+	for i := 1; i <= 10; i++ {
+		wg.Add(1) // Increment the WaitGroup counter
+		go func(i int) {
+			defer wg.Done() // Decrement the counter when the goroutine completes
+			Log5kInsert(i)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func Log5kInsert(k int) {
 	const numMessages = 500
 	// Test log messages
 	for i := 0; i < numMessages; i++ {
 		message := "Log message number " + fmt.Sprintf("%d", k*(i+1))
 		Infof("Test log message: %s", message).PrintAndWriteSafe()
 	}
+}
+
+func SingleLogInsert(t *testing.T) {
+	logPrefix := "TestSingleInsert"
+	logFilePath := "./logs/" + logPrefix + "-log-" + time.Now().Format(string(DateOnly)) + ".log"
+	cleanLogFiles(t, logFilePath)
+	SetLogPrefix(logPrefix)
+
+	SingleLogInsertTest(t)
+
+	checkMessageExistInFile(t, logFilePath, "This is an single message")
+}
+
+func SingleLogInsertTest(t *testing.T) {
+	defer CloseLogFile()
+
+	SetLogTimeFormat(StampNano)
+
+	Infof("Test log message: %s", "This is an single message").PrintAndWriteSafe()
+}
+
+func checkMessageExistInFile(t *testing.T, filePath string, message string) {
+	logFile, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	content := string(logFile)
+	assert.True(t, strings.Contains(content, message))
+}
+
+func cleanLogFiles(t *testing.T, filePath string) {
+	os.Remove(filePath)
 }
