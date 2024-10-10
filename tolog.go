@@ -474,7 +474,7 @@ func flushBuffer(buffer *[]string) {
 
 // checkLogFileDate can change file over a day
 func checkLogFileDate() {
-	currentDay := time.Now().Format(string(logFileDateFormat))
+	currentDay := time.Now().In(LogTimeZone).Format(string(logFileDateFormat))
 	if currentLogDate != currentDay {
 		CloseLogFile()
 		initLog()
