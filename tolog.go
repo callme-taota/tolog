@@ -2,6 +2,7 @@ package tolog
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -524,8 +525,9 @@ func CloseLogFile() {
 		return
 	}
 
+	close(closeChannel)
+
 	if writeChannel != nil { // wait the writeToFile goroutine to finish
-		closeChannel <- struct{}{}
 		close(writeChannel)
 	}
 
@@ -533,6 +535,7 @@ func CloseLogFile() {
 
 	err := logFile.Close()
 	if err != nil {
+		log.Fatal("Failed to close log file:", err)
 		return
 	}
 	isLogFileClosed = true
