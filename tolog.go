@@ -391,7 +391,7 @@ func (l *ToLog) WriteSafe() {
 func (l *ToLog) PrintAndWrite() {
 	CreateFullLog(l)
 	fmt.Println(l.FullLog)
-	if logFile == nil {
+	if logFile == nil || writeChannel == nil {
 		err := initLog()
 		if err != nil {
 			return
